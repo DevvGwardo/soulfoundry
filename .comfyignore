@@ -1,0 +1,20 @@
+# Keep the registry archive small: tests, docs and local scratch stay out.
+tests/
+docs/
+examples/
+app/
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+*.pyo
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.psd
+*.mov
+*.mp4
+.DS_Store

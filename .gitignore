@@ -1,0 +1,25 @@
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# project stores are user data, not source
+projects/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# generated media
+examples/out/
+*.psd
+.DS_Store

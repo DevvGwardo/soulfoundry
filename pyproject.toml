@@ -1,0 +1,34 @@
+[project]
+name = "soulfoundry"
+version = "0.1.0"
+description = "Open-weights character consistency: project-scoped Elements and a published drift score."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "DevvGwardo" }]
+keywords = ["comfyui", "character-consistency", "video", "open-weights"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/DevvGwardo/soulfoundry"
+
+[project.optional-dependencies]
+qc = ["Pillow>=10.0", "numpy>=1.24"]
+dev = ["pytest>=8.0", "Pillow>=10.0", "numpy>=1.24"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["nodes", "nodes.core"]
+
+[tool.comfy]
+PublisherId = "REPLACE_WITH_REGISTRY_PUBLISHER_ID"
+DisplayName = "SoulFoundry"
+Icon = "https://raw.githubusercontent.com/DevvGwardo/soulfoundry/main/assets/icon.png"
+requires-comfyui = ">=0.3.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

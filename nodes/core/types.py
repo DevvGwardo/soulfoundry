@@ -1,0 +1,29 @@
+"""SoulFoundry custom ComfyUI socket types."""
+
+from __future__ import annotations
+
+CHARACTER_SPEC = "SOULFOUNDRY_SPEC"
+ELEMENT = "SOULFOUNDRY_ELEMENT"
+SHEET = "SOULFOUNDRY_SHEET"
+QC_REPORT = "SOULFOUNDRY_QC_REPORT"
+DRIFT_REPORT = "SOULFOUNDRY_DRIFT_REPORT"
+SHOT_LIST = "SOULFOUNDRY_SHOT_LIST"
+
+SOCKET_TYPES: tuple[str, ...] = (
+    CHARACTER_SPEC,
+    ELEMENT,
+    SHEET,
+    QC_REPORT,
+    DRIFT_REPORT,
+    SHOT_LIST,
+)
+
+__all__ = [
+    "CHARACTER_SPEC",
+    "DRIFT_REPORT",
+    "ELEMENT",
+    "QC_REPORT",
+    "SHEET",
+    "SHOT_LIST",
+    "SOCKET_TYPES",
+]
