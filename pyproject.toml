@@ -31,4 +31,11 @@ requires-comfyui = ">=0.3.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# --import-mode=importlib is required here: this repo has an __init__.py at its
+# root (ComfyUI needs it to find NODE_CLASS_MAPPINGS), and pytest's default
+# "prepend" mode walks up looking for package roots, finds it, and tries to
+# import it as a top-level module with no parent package. importlib mode skips
+# that walk. Passed via addopts because the ini key name differs across pytest
+# versions; tests/conftest.py puts the repo root on sys.path.
+addopts = "-q --import-mode=importlib"
+norecursedirs = [".venv*", ".git", "build", "dist", "__pycache__"]

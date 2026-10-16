@@ -120,3 +120,33 @@ def test_expansion_is_idempotent_on_already_expanded_text():
     once = expand_mentions("@santiago", LIB)
     twice = expand_mentions(once, LIB)
     assert once == twice
+
+
+def test_backticked_handle_is_prose_not_a_mention():
+    """The compiled bible documents its own handle as `@santiago`.
+
+    That is text *about* the handle, not a reference to resolve. If it matched,
+    expanding a prompt would re-inject a mention from the bible's own header
+    and expansion would stop being idempotent.
+    """
+    assert find_mentions("see `@santiago` in the docs") == []
+    assert find_mentions("`@santiago` and @marisol") == ["marisol"]
+
+
+def test_expanding_a_real_compiled_bible_is_idempotent():
+    """The exact failure the end-to-end demo caught."""
+    from nodes.core.param_grid import CharacterSpec, compile_bible
+
+    spec = CharacterSpec(name="santiago")
+    library = {"santiago": compile_bible(spec)}
+    once = expand_mentions("@santiago walks in", library)
+    assert "walks in" in once
+    assert expand_mentions(once, library) == once
+
+
+def test_compiled_bible_references_its_own_handle():
+    from nodes.core.param_grid import CharacterSpec, compile_bible
+
+    bible = compile_bible(CharacterSpec(name="santiago"))
+    assert "`@santiago`" in bible
+    assert find_mentions(bible) == []

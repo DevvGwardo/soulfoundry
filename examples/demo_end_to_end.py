@@ -39,28 +39,33 @@ def _unit(v: list[float]) -> list[float]:
     return [x / norm for x in v]
 
 
-def fake_embedding(seed: int, similarity: float, *, base_seed: int = 7) -> list[float]:
-    """A synthetic 8-dim 'face embedding' with a *known* cosine to the reference.
+def fake_embedding(
+    seed: int,
+    *,
+    person: int = 7,
+    identity: float = 0.95,
+) -> list[float]:
+    """A synthetic 8-dim 'face embedding'.
 
-    Stands in for a real face embedder so the demo runs without a GPU.
+    Stands in for a real face embedder so the demo runs with no GPU. Each
+    vector blends a shared per-person direction with a per-shot direction:
 
-    Cosine similarity is scale-invariant, so scaling a vector does not move
-    it. To control similarity directly, blend the reference direction with an
-    independent per-shot direction:
+        v = identity * unit(person) + sqrt(1 - identity^2) * unit(shot)
 
-        v = s * unit(base) + sqrt(1 - s^2) * unit(noise)
+    Because cosine is scale-invariant, the two directions must be *blended*,
+    not scaled, or the similarity never moves. With near-orthogonal random
+    directions in 8 dimensions, ``cos(v, reference) ~= identity``, so the
+    ``identity`` argument is the similarity you actually get.
 
-    In 8 dimensions the noise direction is near-orthogonal to the base, so
-    ``cos(v, base) ~= s``. That makes the demo curve a real measurement
-    rather than a number that happens to print.
+    Realistic bands for a real embedder: 0.93 to 0.98 holds the same person,
+    below about 0.75 reads as someone else, and 0.6 to 0.8 is what an
+    unlocked, re-prompted sequence tends to score.
     """
-    base_rng = random.Random(base_seed)
-    noise_rng = random.Random(seed)
-    base = _unit([base_rng.uniform(-1, 1) for _ in range(8)])
-    noise = _unit([noise_rng.uniform(-1, 1) for _ in range(8)])
-    s = max(-1.0, min(1.0, similarity))
+    person_dir = _unit([random.Random(person * 1000 + i).uniform(-1, 1) for i in range(8)])
+    shot_dir = _unit([random.Random(seed * 7919 + i).uniform(-1, 1) for i in range(8)])
+    s = max(-1.0, min(1.0, identity))
     other = (max(0.0, 1.0 - s * s)) ** 0.5
-    return [s * b + other * n for b, n in zip(base, noise)]
+    return [s * p + other * o for p, o in zip(person_dir, shot_dir)]
 
 
 def main() -> int:
@@ -177,13 +182,19 @@ def main() -> int:
         # --- 6. Drift, locked vs unlocked ---------------------------------
         header("6. ConsistencyAudit: locked vs unlocked")
         locked = build_report(
-            reference=fake_embedding(0, 1.0),
-            frames=[fake_embedding(100 + i, 0.97 - i * 0.008) for i in range(10)],
+            reference=fake_embedding(0, identity=1.0),
+            frames=[
+                fake_embedding(100 + i, identity=0.97 - i * 0.009)
+                for i in range(10)
+            ],
             label="locked",
         )
         unlocked = build_report(
-            reference=fake_embedding(0, 1.0),
-            frames=[fake_embedding(200 + i, 0.80 - i * 0.02) for i in range(10)],
+            reference=fake_embedding(0, identity=1.0),
+            frames=[
+                fake_embedding(300 + i, identity=0.78 - i * 0.012)
+                for i in range(10)
+            ],
             label="unlocked",
         )
         locked.baseline = unlocked.scores
