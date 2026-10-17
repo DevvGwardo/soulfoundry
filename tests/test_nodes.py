@@ -290,15 +290,22 @@ def test_character_lock_requires_the_right_artifact_per_route():
         facial_hair="None", details="None", outfit="Casual",
     )[0]
     lock = CharacterLock()
-    with pytest.raises(ValueError, match="needs an embed_path"):
+    with pytest.raises(ValueError, match="needs an image, an embedding socket, or an embed_path"):
         lock.lock(spec, route="embedding")
     with pytest.raises(ValueError, match="needs lora_path"):
         lock.lock(spec, route="lora")
 
-    element, status = lock.lock(spec, route="embedding", embed_path="/tmp/e.pt")
+    # A .pt belongs to another node pack: recorded, but the status must say the
+    # vector was not loaded rather than implying the lock is complete.
+    element, embedding, status = lock.lock(
+        spec, route="embedding", embed_path="/tmp/e.pt"
+    )
     assert element["name"] == "santiago"
     assert element["spec_digest"]
     assert "embedding" in status
+    assert "vector NOT loaded" in status
+    assert embedding["state"] == "external"
+    assert embedding["vector"] == []
 
 
 def test_character_lock_persists_and_pins(tmp_path):

@@ -30,14 +30,25 @@ Notes:
 
 ## 2. `lock_character`
 
-Turn an approved sheet into a persistent Element.
+Turn an approved sheet into a persistent Element. `CharacterEmbed` is the
+sensor: it runs SCRFD + ArcFace on the sheet's face and emits a 512-d vector,
+which `CharacterLock` persists next to the project.
 
 ```
-LoadImage ──> (face crop) ──> <embedding node: IP-Adapter / PuLID / InstantID> ──> CharacterLock (route=embedding)
-                                                                                        │
-                                                                                        v
-                                                                              ElementLibrary (action=save, pin)
+LoadImage ──> CharacterEmbed ──> CharacterLock (route=embedding) ──> ElementLibrary (action=save, pin)
+                    │                        ▲
+                    └── embedding ───────────┘
 ```
+
+Notes:
+- `CharacterEmbed` saves to `<project>/embeddings/<name>_reference.npy` plus a
+  JSON sidecar recording the backend, so a vector can never be mistaken for
+  one from a different embedder later.
+- `EmbeddingFromFile` loads a saved vector back, so an audit is reproducible
+  without re-embedding the reference every run.
+- Routes B (LoRA) and C (reference latent) record an artifact path instead.
+  This pack does not train a LoRA; another pack does, and `CharacterLock`
+  records the path plus the spec digest so the lock stays verifiable.
 
 Route A (`embedding`) needs no training and is the default. Route B (`lora`)
 is the high-fidelity upgrade and needs 10 to 30 varied images plus GPU time.

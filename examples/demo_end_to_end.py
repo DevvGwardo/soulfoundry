@@ -1,33 +1,65 @@
 #!/usr/bin/env python3
-"""End-to-end demo: the minimum viable spine, no GPU required.
-
-Runs the whole pipeline with synthetic data so it can execute anywhere:
-
-    spec -> sheet prompt -> QC -> lock -> library -> mentions -> drift report
+"""End-to-end demo: the whole spine, no GPU required.
 
     python examples/demo_end_to_end.py
 
-Everything here is the real code path. Only the embeddings are synthetic,
-because a face embedding model needs a GPU and a model download.
+    spec -> sheet prompt -> QC -> lock -> library -> mentions -> drift report
+
+Two paths, and the demo says out loud which one ran:
+
+**measured**
+    If onnxruntime and the ArcFace models are present, the drift section
+    embeds real public-domain portraits (three of Lincoln, two of Darwin, one
+    of Curie) and reports the real cosine similarities. Same person scores
+    high, different people score near zero. N is small because the repo ships
+    six portraits, not six thousand; the numbers are still measured, not
+    modelled.
+
+**synthetic**
+    Otherwise it falls back to a clearly labelled synthetic curve so the demo
+    still runs on a bare machine. The fallback is labelled in the output and
+    in the report itself, because a synthetic number that looks like a face
+    score is worse than no number.
+
+Everything except the synthetic fallback is the real code path.
 """
 
 from __future__ import annotations
 
-import random
+import os
 import re
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from nodes.core.drift import DRIFT_FLOOR, build_report
-from nodes.core.mentions import expand_mentions
-from nodes.core.param_grid import CharacterSpec, compile_bible, compile_prompt, spec_seed
-from nodes.core.sheet import build_sheet_prompt, qc_sheet_metrics
-from nodes.core.store import Element, ProjectStore, Shot
+from nodes.core.drift import DRIFT_FLOOR, DriftReport, score_against_reference  # noqa: E402
+from nodes.core.mentions import expand_mentions  # noqa: E402
+from nodes.core.param_grid import (  # noqa: E402
+    CharacterSpec,
+    compile_bible,
+    compile_prompt,
+    spec_seed,
+)
+from nodes.core.sheet import build_sheet_prompt, qc_sheet, qc_sheet_metrics  # noqa: E402
+from nodes.core.store import Element, ProjectStore, Shot  # noqa: E402
 
 RULE = "=" * 66
+
+FACES_DIR = Path(
+    os.environ.get("SOULFOUNDRY_FACES_DIR", ROOT / "tests" / "fixtures" / "faces")
+)
+
+# Public-domain portraits shipped with the repo. Three of Lincoln give real
+# same-person pairs across a decade; Darwin and Curie are different people.
+SAME_PERSON = [("lincoln_b.jpg", "Lincoln, 1863"), ("lincoln_c.jpg", "Lincoln, 1860")]
+OTHER_PEOPLE = [
+    ("darwin_a.jpg", "Darwin, seated"),
+    ("darwin_b.jpg", "Darwin, Cameron portrait"),
+    ("curie_a.jpg", "Curie, 1920s"),
+]
 
 
 def header(text: str) -> None:
@@ -39,33 +71,73 @@ def _unit(v: list[float]) -> list[float]:
     return [x / norm for x in v]
 
 
-def fake_embedding(
-    seed: int,
-    *,
-    person: int = 7,
-    identity: float = 0.95,
-) -> list[float]:
-    """A synthetic 8-dim 'face embedding'.
+def synthetic_curve(n: int, start: float, step: float, seed0: int) -> list[float]:
+    """Synthetic similarities, used only when no real embedder is available."""
+    import random
 
-    Stands in for a real face embedder so the demo runs with no GPU. Each
-    vector blends a shared per-person direction with a per-shot direction:
+    person = _unit([random.Random(7 * 1000 + i).uniform(-1, 1) for i in range(16)])
+    scores = []
+    for i in range(n):
+        s = max(-1.0, min(1.0, start - i * step))
+        other = (max(0.0, 1.0 - s * s)) ** 0.5
+        shot = _unit(
+            [random.Random((seed0 + i) * 7919 + k).uniform(-1, 1) for k in range(16)]
+        )
+        v = [s * p + other * o for p, o in zip(person, shot)]
+        dot = sum(a * b for a, b in zip(person, v))
+        na = sum(a * a for a in person) ** 0.5
+        nb = sum(b * b for b in v) ** 0.5
+        scores.append(dot / (na * nb))
+    return scores
 
-        v = identity * unit(person) + sqrt(1 - identity^2) * unit(shot)
 
-    Because cosine is scale-invariant, the two directions must be *blended*,
-    not scaled, or the similarity never moves. With near-orthogonal random
-    directions in 8 dimensions, ``cos(v, reference) ~= identity``, so the
-    ``identity`` argument is the similarity you actually get.
+def real_measurement() -> dict | None:
+    """Embed real portraits. Returns None when the embedder or fixtures are absent."""
+    try:
+        from nodes.core.embed import FaceEmbedder
+    except Exception:
+        return None
 
-    Realistic bands for a real embedder: 0.93 to 0.98 holds the same person,
-    below about 0.75 reads as someone else, and 0.6 to 0.8 is what an
-    unlocked, re-prompted sequence tends to score.
-    """
-    person_dir = _unit([random.Random(person * 1000 + i).uniform(-1, 1) for i in range(8)])
-    shot_dir = _unit([random.Random(seed * 7919 + i).uniform(-1, 1) for i in range(8)])
-    s = max(-1.0, min(1.0, identity))
-    other = (max(0.0, 1.0 - s * s)) ** 0.5
-    return [s * p + other * o for p, o in zip(person_dir, shot_dir)]
+    embedder = FaceEmbedder()
+    ok, why = embedder.available()
+    if not ok:
+        print(f"  (real embedder unavailable: {why})")
+        return None
+
+    needed = ["lincoln_a.jpg"] + [f for f, _ in SAME_PERSON + OTHER_PEOPLE]
+    missing = [f for f in needed if not (FACES_DIR / f).is_file()]
+    if missing:
+        print(f"  (fixtures missing: {', '.join(missing)})")
+        return None
+
+    ref = embedder.embed(str(FACES_DIR / "lincoln_a.jpg"))
+    if not ref.ok:
+        print("  (no face detected in the reference portrait)")
+        return None
+
+    def collect(pairs):
+        vecs, labels = [], []
+        for name, label in pairs:
+            r = embedder.embed(str(FACES_DIR / name))
+            if r.ok:
+                vecs.append(r.primary)
+                labels.append(label)
+        return vecs, labels
+
+    locked_vecs, locked_labels = collect(SAME_PERSON)
+    unlocked_vecs, unlocked_labels = collect(OTHER_PEOPLE)
+    if not locked_vecs or not unlocked_vecs:
+        return None
+
+    return {
+        "backend": "arcface",
+        "dim": ref.dim,
+        "reference_label": "Lincoln, 1862 (reference)",
+        "locked": score_against_reference(ref.primary, locked_vecs),
+        "locked_labels": locked_labels,
+        "unlocked": score_against_reference(ref.primary, unlocked_vecs),
+        "unlocked_labels": unlocked_labels,
+    }
 
 
 def main() -> int:
@@ -126,6 +198,24 @@ def main() -> int:
     best = max(range(len(results)), key=lambda i: (results[i].passed, results[i].score))
     print(f"\nkept candidate {best + 1} of {len(batch)} (batch-and-pick)")
 
+    # --- 3b. QC a real IMAGE tensor ---------------------------------------
+    header("3b. SheetQC on a real IMAGE tensor (the path that used to crash)")
+    try:
+        import numpy as np
+
+        # A synthetic 3-panel sheet: grey backdrop, lit subject columns. The
+        # point is the shape ([B,H,W,C] float 0..1) that ComfyUI actually
+        # sends, not the pixels.
+        sheet_arr = np.full((1, 320, 576, 3), 0.50, dtype=np.float32)
+        for offset in (60, 252, 444):
+            sheet_arr[:, 40:300, offset:offset + 84] = 0.78
+        real_qc = qc_sheet(sheet_arr)
+        print(f"  accepted [1,320,576,3] float tensor: score {real_qc.score:.2f}, "
+              f"passed={real_qc.passed}")
+        print("  checks: " + ", ".join(f"{k}={v}" for k, v in real_qc.checks.items()))
+    except ImportError:
+        print("  (numpy not installed; skipped)")
+
     # --- 4. Lock it into the store ----------------------------------------
     header("4. CharacterLock + ElementLibrary: persist the lock")
     bible = compile_bible(spec)
@@ -137,7 +227,6 @@ def main() -> int:
                 spec_json=spec.to_json(),
                 spec_digest=spec.digest(),
                 sheet_path=str(workdir / "santiago-sheet.png"),
-                embed_path=str(workdir / "santiago-ipadapter.pt"),
                 bible_md=bible,
             )
         )
@@ -154,7 +243,7 @@ def main() -> int:
         print(f"store        : {store.path}")
         print(f"project      : {summary['project_id']}")
         print(f"elements     : {summary['elements']}")
-        print(f"\nlibrary:\n{store.list_elements() and ''}", end="")
+        print("\nlibrary:")
         for el in store.list_elements():
             print(f"  {el.handle:<16} {el.kind:<10} "
                   f"{'pinned' if el.pinned else '      '} {el.spec_digest or '-'}")
@@ -181,35 +270,61 @@ def main() -> int:
 
         # --- 6. Drift, locked vs unlocked ---------------------------------
         header("6. ConsistencyAudit: locked vs unlocked")
-        locked = build_report(
-            reference=fake_embedding(0, identity=1.0),
-            frames=[
-                fake_embedding(100 + i, identity=0.97 - i * 0.009)
-                for i in range(10)
-            ],
-            label="locked",
-        )
-        unlocked = build_report(
-            reference=fake_embedding(0, identity=1.0),
-            frames=[
-                fake_embedding(300 + i, identity=0.78 - i * 0.012)
-                for i in range(10)
-            ],
-            label="unlocked",
-        )
-        locked.baseline = unlocked.scores
+        measured = real_measurement()
 
-        for seq, score in zip(locked.seqs, locked.scores):
+        if measured:
+            print(f"  embedder : {measured['backend']}, {measured['dim']}-d")
+            print(f"  reference: {measured['reference_label']}")
+            print(f"  locked   : {len(measured['locked'])} real frames of the same person")
+            for label, score in zip(measured["locked_labels"], measured["locked"]):
+                print(f"      {label:<28} {score:.3f}")
+            print(f"  unlocked : {len(measured['unlocked'])} real frames of other people")
+            for label, score in zip(measured["unlocked_labels"], measured["unlocked"]):
+                print(f"      {label:<28} {score:.3f}")
+
+            report = DriftReport(
+                scores=measured["locked"],
+                seqs=list(range(1, len(measured["locked"]) + 1)),
+                baseline=measured["unlocked"],
+                label="locked",
+                backend=measured["backend"],
+                notes=[
+                    f"Measured with ArcFace on {len(measured['locked'])} "
+                    f"same-person and {len(measured['unlocked'])} other-person "
+                    f"public-domain portraits. Small N by design: these are the "
+                    f"real photographs the repo ships, not a benchmark.",
+                    "The baseline is the other-person set, which is what an "
+                    "unlocked, re-prompted sequence drifts toward.",
+                ],
+            )
+            path_used = "measured"
+        else:
+            print("  no real embedder available, falling back to a synthetic curve")
+            print("  (this curve is labelled synthetic in the report)")
+            n = 10
+            report = DriftReport(
+                scores=synthetic_curve(n, 0.97, 0.009, 100),
+                seqs=list(range(1, n + 1)),
+                baseline=synthetic_curve(n, 0.78, 0.012, 300),
+                label="locked",
+                backend="synthetic",
+                notes=[
+                    "SYNTHETIC: no face embedder was available, so these numbers "
+                    "are generated, not measured. Do not publish them.",
+                ],
+            )
+            path_used = "synthetic"
+
+        for seq, score in zip(report.seqs, report.scores):
             store.save_shot(Shot(seq=seq, prompt=f"shot {seq}"))
             store.record_drift(seq, score)
 
-        print(locked.ascii_curve())
         print()
-        print(locked.markdown())
-        print(f"\nunlocked mean {unlocked.mean:.3f} vs locked mean "
-              f"{locked.mean:.3f}  ->  lift {locked.lift():+.3f}")
-        print(f"floor {DRIFT_FLOOR}: locked holding = {locked.holding}, "
-              f"unlocked holding = {unlocked.holding}")
+        print(report.markdown())
+        baseline_mean = sum(report.baseline) / len(report.baseline)
+        print(f"\nunlocked baseline mean {baseline_mean:.3f} vs locked mean "
+              f"{report.mean:.3f}  ->  lift {report.lift():+.3f}")
+        print(f"floor {DRIFT_FLOOR}: holding = {report.holding}")
         print(f"curve persisted to the store: {store.drift_curve()}")
 
     # --- 7. Export --------------------------------------------------------
@@ -221,8 +336,11 @@ def main() -> int:
     print(f"wrote {bible_path} ({len(bible)} chars)")
 
     header("DONE")
-    print("Every step above is the real code path from nodes/core.")
-    print("Only the embeddings are synthetic: a face embedder needs a GPU.")
+    if path_used == "measured":
+        print("Drift numbers above are MEASURED with ArcFace on real photographs.")
+    else:
+        print("Drift numbers above are SYNTHETIC (no embedder on this machine).")
+    print("Every other step is the real code path from nodes/core.")
     print(f"\nscratch dir: {workdir}")
     return 0
 

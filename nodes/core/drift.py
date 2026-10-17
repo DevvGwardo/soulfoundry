@@ -26,6 +26,12 @@ class DriftReport:
     seqs: list[int] = field(default_factory=list)
     baseline: list[float] | None = None
     label: str = "locked"
+    #: Which embedder produced these scores. ``arcface`` means real face
+    #: identity; anything else must be labelled in every artifact, because a
+    #: perceptual descriptor is not a face match and must not be published as
+    #: one.
+    backend: str = ""
+    notes: list[str] = field(default_factory=list)
 
     # -- derived ------------------------------------------------------------
 
@@ -95,6 +101,9 @@ class DriftReport:
             "holding": self.holding,
             "slope": round(self.slope(), 5),
             "degradation_seq": self.degradation_seq(),
+            "backend": self.backend,
+            "is_face_embedding": self.backend == "arcface",
+            "notes": self.notes,
             "baseline_mean": (
                 round(sum(self.baseline) / len(self.baseline), 4)
                 if self.baseline
@@ -112,6 +121,20 @@ class DriftReport:
         lines = [
             f"# Drift report: {self.label}",
             "",
+        ]
+        if self.backend and self.backend != "arcface":
+            lines += [
+                f"> **Not a face-identity score.** These numbers come from the "
+                f"`{self.backend}` descriptor, which has no notion of identity. "
+                f"Do not publish them as a face-match result.",
+                "",
+            ]
+        elif self.backend == "arcface":
+            lines += [
+                "> Embedder: ArcFace (SCRFD detection, 5-point alignment, 512-d).",
+                "",
+            ]
+        lines += [
             f"- Shots scored: **{self.n}**",
             f"- Mean similarity: **{self.mean:.3f}**",
             f"- Worst shot: **{self.worst:.3f}** (shot {self.worst_seq})",
@@ -134,6 +157,9 @@ class DriftReport:
         for seq, score in zip(self.seqs, self.scores):
             flag = "" if score >= DRIFT_FLOOR else " **drift**"
             lines.append(f"| {seq} | {score:.3f}{flag} |")
+        if self.notes:
+            lines += ["", "## Notes", ""]
+            lines += [f"- {note}" for note in self.notes]
         return "\n".join(lines)
 
     def ascii_curve(self, width: int = 48, height: int = 8) -> str:

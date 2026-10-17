@@ -23,3 +23,13 @@ htmlcov/
 examples/out/
 *.psd
 .DS_Store
+
+# Face models are fetched by scripts/fetch_models.py, not committed.
+# They are InsightFace's buffalo_sc pack, which is licensed for non-commercial
+# research use. Redistributing them from a MIT-licensed repo would be a licence
+# violation, so the repo ships the fetcher and the user downloads them.
+models/
+
+
+# local uv environment lockfile
+uv.lock

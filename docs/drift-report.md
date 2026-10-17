@@ -14,12 +14,25 @@ one that holds for 40, and nobody can compare two approaches honestly.
 ## How scoring works
 
 1. Embed the locked reference (the sheet's face crop) with a face embedding
-   model: ArcFace, AdaFace, or a CLIP face tower.
-2. Embed the corresponding face crop from every generated shot.
+   model. This pack ships **ArcFace** (SCRFD detection, 5-point alignment to
+   the canonical 112x112 template, MobileFaceNet backbone, 512-d), running on
+   CPU through onnxruntime.
+2. Embed the corresponding face crop from every generated shot the same way.
 3. Cosine similarity of each shot against the reference.
 
 Cosine, not Euclidean: embedding magnitude is an artifact of the extractor,
 and only direction carries identity.
+
+The backend is recorded on every report. `backend="arcface"` means real face
+identity. Anything else (the opt-in perceptual descriptor used for CI) prints
+`Not a face-identity score` at the top of the markdown and sets
+`is_face_embedding: false` in `to_dict()`, so a descriptor can never be quoted
+as a face match by accident.
+
+Measured reference points from `tests/fixtures/faces`: two portraits of the
+same person score 0.87 and 0.51 (different decades, one beardless);
+unrelated people score 0.03, -0.01 and 0.09. That is the separation the floor
+below is calibrated against.
 
 ## Reading the report
 

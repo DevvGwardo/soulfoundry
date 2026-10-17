@@ -1,0 +1,14 @@
+# Face embedding dependencies for SoulFoundry.
+#
+# ComfyUI already ships numpy, so on a normal ComfyUI install the only new
+# package is onnxruntime. It is CPU-only: no GPU, no torch, no CUDA.
+#
+#   pip install -r requirements-embed.txt
+#   python scripts/fetch_models.py
+#
+# The model weights themselves are NOT in this repo. See the licensing note in
+# README.md: InsightFace's buffalo_sc pack is licensed for non-commercial
+# research use, so it is downloaded by the user rather than redistributed here.
+
+numpy>=1.24
+onnxruntime>=1.16

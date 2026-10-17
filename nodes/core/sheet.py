@@ -221,7 +221,14 @@ def qc_sheet_metrics(metrics: Mapping[str, float]) -> SheetQCResult:
 
 
 def qc_sheet(image: Any, panels: int = 3) -> SheetQCResult:
-    """Grade a real image. Requires Pillow + numpy (imported lazily).
+    """Grade a real image. Requires numpy (imported lazily).
+
+    Accepts anything ComfyUI hands an ``IMAGE`` socket: a torch tensor
+    ``[B, H, W, C]`` float in ``0..1``, a numpy array, a PIL image, bytes, or
+    a path. Normalisation lives in :func:`nodes.core.embed.to_rgb_uint8` so
+    this path and the face-embedding path cannot disagree about what an image
+    is. A torch tensor has no ``.convert()``, which is why the old version of
+    this function raised ``AttributeError`` on real ComfyUI input.
 
     Splits the sheet into ``panels`` vertical strips, measures shadow ratio,
     highlight clipping, backdrop consistency and subject coverage, and
@@ -230,19 +237,21 @@ def qc_sheet(image: Any, panels: int = 3) -> SheetQCResult:
     """
     try:
         import numpy as np
-        from PIL import Image
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise RuntimeError(
-            "qc_sheet(image=...) needs Pillow and numpy; "
+            "qc_sheet(image=...) needs numpy; "
             "use qc_sheet_metrics() for a dependency-free path"
         ) from exc
 
-    if isinstance(image, (str, bytes)):
-        img = Image.open(image)
-    else:
-        img = image
-    img = img.convert("L")
-    arr = np.asarray(img, dtype=np.float32)
+    from .embed import to_rgb_uint8
+
+    rgb = to_rgb_uint8(image)
+    # Rec.601 luma, done here so the QC path needs no Pillow
+    arr = (
+        0.299 * rgb[..., 0].astype(np.float32)
+        + 0.587 * rgb[..., 1].astype(np.float32)
+        + 0.114 * rgb[..., 2].astype(np.float32)
+    )
 
     height, width = arr.shape
     if width < panels:

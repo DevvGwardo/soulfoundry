@@ -16,6 +16,7 @@ from .character_lock import CharacterLock
 from .consistency_audit import ConsistencyAudit
 from .element_injector import ElementInjector, LocationElement, PropElement
 from .element_library import ElementLibrary
+from .face_embed import CharacterEmbed, EmbeddingFromFile
 from .mention_resolver import MentionResolver
 from .sheet_builder import SheetBuilder
 from .sheet_qc import SheetQCBatch, SheetQC
@@ -26,6 +27,8 @@ NODE_CLASS_MAPPINGS: dict[str, type] = {
     "SoulFoundrySheetBuilder": SheetBuilder,
     "SoulFoundrySheetQC": SheetQC,
     "SoulFoundrySheetQCBatch": SheetQCBatch,
+    "SoulFoundryCharacterEmbed": CharacterEmbed,
+    "SoulFoundryEmbeddingFromFile": EmbeddingFromFile,
     "SoulFoundryCharacterLock": CharacterLock,
     "SoulFoundryElementLibrary": ElementLibrary,
     "SoulFoundryElementInjector": ElementInjector,
@@ -42,6 +45,8 @@ NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {
     "SoulFoundrySheetBuilder": "Character Sheet Builder (SoulFoundry)",
     "SoulFoundrySheetQC": "Sheet QC / Reject Test (SoulFoundry)",
     "SoulFoundrySheetQCBatch": "Sheet QC Batch Pick (SoulFoundry)",
+    "SoulFoundryCharacterEmbed": "Character Embed / Face Vector (SoulFoundry)",
+    "SoulFoundryEmbeddingFromFile": "Embedding From File (SoulFoundry)",
     "SoulFoundryCharacterLock": "Character Lock (SoulFoundry)",
     "SoulFoundryElementLibrary": "Element Library (SoulFoundry)",
     "SoulFoundryElementInjector": "Element Injector (SoulFoundry)",

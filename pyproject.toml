@@ -1,27 +1,43 @@
 [project]
 name = "soulfoundry"
-version = "0.1.0"
+version = "0.2.0"
 description = "Open-weights character consistency: project-scoped Elements and a published drift score."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "DevvGwardo" }]
 keywords = ["comfyui", "character-consistency", "video", "open-weights"]
-dependencies = []
+# numpy is required: the face embedder normalises IMAGE tensors and runs the
+# SCRFD/ArcFace post-processing. ComfyUI ships numpy already, so this adds
+# nothing to a normal install. The pure-logic modules (param_grid, store,
+# mentions, drift, sheet metrics) still run on stdlib alone; only the image and
+# embedding paths need numpy.
+dependencies = ["numpy>=1.24"]
 
 [project.urls]
 Repository = "https://github.com/DevvGwardo/soulfoundry"
 
 [project.optional-dependencies]
-qc = ["Pillow>=10.0", "numpy>=1.24"]
-dev = ["pytest>=8.0", "Pillow>=10.0", "numpy>=1.24"]
+# qc_sheet(image=...) and the face embedder.
+images = ["numpy>=1.24"]
+# The real face-embedding path: SCRFD detection + ArcFace on CPU.
+embed = ["numpy>=1.24", "onnxruntime>=1.16"]
+dev = ["pytest>=8.0", "numpy>=1.24", "onnxruntime>=1.16", "Pillow>=10.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+# ComfyUI imports a custom node pack by its directory name and reads
+# NODE_CLASS_MAPPINGS from that package's __init__.py. A plain
+# `packages = ["nodes", "nodes.core"]` ships the submodules but drops the root
+# __init__.py, so `pip install` produced a `nodes` package with no entry point
+# at all. Mapping the repo root to a named package keeps the clone-install path
+# working (the directory is `soulfoundry`, so the package name matches) and
+# makes the wheel importable.
 [tool.setuptools]
-packages = ["nodes", "nodes.core"]
+packages = ["soulfoundry", "soulfoundry.nodes", "soulfoundry.nodes.core"]
+package-dir = {"soulfoundry" = "."}
 
 [tool.comfy]
 PublisherId = "REPLACE_WITH_REGISTRY_PUBLISHER_ID"
@@ -38,4 +54,4 @@ testpaths = ["tests"]
 # that walk. Passed via addopts because the ini key name differs across pytest
 # versions; tests/conftest.py puts the repo root on sys.path.
 addopts = "-q --import-mode=importlib"
-norecursedirs = [".venv*", ".git", "build", "dist", "__pycache__"]
+norecursedirs = [".venv*", ".git", "build", "dist", "__pycache__", "models"]
