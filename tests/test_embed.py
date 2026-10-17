@@ -347,7 +347,9 @@ def _uniform_batch(paths, size: tuple[int, int] = (256, 256)) -> np.ndarray:
 
     Real ``IMAGE`` batches are always one resolution; the fixtures are not,
     so they get resized here rather than the test asserting on ragged input
-    ComfyUI could never produce.
+    ComfyUI could never produce. Pillow is imported here rather than at module
+    scope so the whole test module still imports on a runtime-only install
+    where Pillow is absent.
     """
     from PIL import Image
 

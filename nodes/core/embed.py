@@ -107,14 +107,12 @@ def to_rgb_uint8(image: Any) -> np.ndarray:
     if isinstance(image, (bytes, bytearray)):
         from io import BytesIO
 
-        from PIL import Image
-
+        Image = _require_pillow("decoding image bytes")
         with Image.open(BytesIO(bytes(image))) as im:
             return _pil_to_rgb(im)
 
     if isinstance(image, (str, os.PathLike)):
-        from PIL import Image
-
+        Image = _require_pillow("reading an image path")
         with Image.open(os.fspath(image)) as im:
             return _pil_to_rgb(im)
 
@@ -126,6 +124,26 @@ def to_rgb_uint8(image: Any) -> np.ndarray:
         return _pil_to_rgb(image)
 
     raise TypeError(f"cannot normalise {type(image)!r} into an RGB image")
+
+
+def _require_pillow(why: str):
+    """Import Pillow, or explain that ComfyUI already has it.
+
+    Only the file/bytes paths need Pillow. A ComfyUI ``IMAGE`` tensor and a
+    numpy array go through :func:`_array_to_rgb`, which is pure numpy, so the
+    node pack works on a runtime-only install. Reading a ``.jpg`` needs a
+    decoder, and every ComfyUI install ships one.
+    """
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            f"Pillow is needed for {why}, and is not installed. ComfyUI ships "
+            f"it already; on a bare Python install use "
+            f"`pip install -r requirements-dev.txt`. Passing an IMAGE tensor or "
+            f"a numpy array avoids the dependency entirely."
+        ) from exc
+    return Image
 
 
 def to_rgb_batch(image: Any) -> list[np.ndarray]:

@@ -210,14 +210,19 @@ recorded as artifacts with a spec digest so the lock stays verifiable.
 ## Tests
 
 ```bash
+pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-158 tests, about 2 seconds, no GPU. The ArcFace tests run against real
+158 tests, about 7 seconds, no GPU. The ArcFace tests run against real
 portraits and skip cleanly when the models are absent. The suite covers the
 ComfyUI contracts (socket types, `INPUT_TYPES` shape, `RETURN_TYPES` length)
 and the normalisation cases that used to crash, including a duck-typed torch
 tensor, because that is what an `IMAGE` socket actually carries.
+
+Pillow is in the dev requirements only, because the tests read image files.
+The runtime does not need it: an `IMAGE` tensor and a numpy array normalise
+with pure numpy.
 
 ## Layout
 
@@ -227,6 +232,8 @@ nodes/core/       all real logic: params, sheet, store, mentions, drift, embed
 tests/            unit tests + public-domain face fixtures
 examples/         runnable end-to-end demo
 scripts/          fetch_models.py
+requirements-embed.txt   runtime face-embedding deps (numpy, onnxruntime)
+requirements-dev.txt     test deps (+ Pillow, pytest)
 docs/             bible format, drift report format
 store/            canonical SQL schema
 ```

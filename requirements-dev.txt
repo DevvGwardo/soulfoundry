@@ -1,0 +1,13 @@
+# Test and development dependencies for SoulFoundry.
+#
+#   pip install -r requirements-dev.txt
+#   python -m pytest -q
+#
+# Pillow is only needed to read image *files* in the tests. ComfyUI ships it,
+# and the runtime never needs it: an IMAGE tensor and a numpy array are
+# normalised with pure numpy.
+
+numpy>=1.24
+onnxruntime>=1.16
+Pillow>=10.0
+pytest>=8.0
